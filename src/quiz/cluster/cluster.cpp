@@ -18,7 +18,7 @@ pcl::visualization::PCLVisualizer::Ptr initScene(Box window, int zoom)
   	viewer->setCameraPosition(0, 0, zoom, 0, 1, 0);
   	viewer->addCoordinateSystem (1.0);
 
-  	viewer->addCube(window.x_min, window.x_max, window.y_min, window.y_max, 0, 0, 1, 1, 1, "window");
+  	viewer->addCube(window.x_min, window.x_max, window.y_min, window.y_max, 0, 0, 0, 0, 0, "window");
   	return viewer;
 }
 
@@ -75,12 +75,43 @@ void render2DTree(Node* node, pcl::visualization::PCLVisualizer::Ptr& viewer, Bo
 
 }
 
+void clusterHelper(int index, const std::vector<std::vector<float>>& points, std::vector<int>& cluster, std::vector<bool>& processed, KdTree* tree, float distanceTol) {
+	// push the point into the cluster
+	processed[index] = true;
+	cluster.push_back(index);
+
+	// get all the nearest points using tree search
+	std::vector<int> nearest = tree->search(points[index], distanceTol);
+
+	// go through all the nearest points
+	for (int id : nearest) {
+		if (false == processed[id]) {
+			clusterHelper(id, points, cluster, processed, tree, distanceTol);
+		}
+	}
+}
+
 std::vector<std::vector<int>> euclideanCluster(const std::vector<std::vector<float>>& points, KdTree* tree, float distanceTol)
 {
 
 	// TODO: Fill out this function to return list of indices for each cluster
-
+	/* Vector of ints is a cluster. Vector of vector of ints is a cluster of clusters*/
 	std::vector<std::vector<int>> clusters;
+
+	// Create a vector of booleans with same size as number of points. This will tell if each point is processed or not
+	std::vector<bool> processed(points.size(), false);
+
+	int i = 0;
+	while (i < points.size()) {
+		if (true == processed[i]) {
+			i++;
+			continue;
+		}
+		std::vector<int> cluster;
+		clusterHelper(i, points, cluster, processed, tree, distanceTol);
+		clusters.push_back(cluster);
+		i++;
+	}
  
 	return clusters;
 
