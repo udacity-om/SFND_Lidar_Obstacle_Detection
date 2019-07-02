@@ -28,12 +28,45 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
     auto startTime = std::chrono::steady_clock::now();
 
     // TODO:: Fill in the function to do voxel grid point reduction and region based filtering
+	// Create voxel grid such that there is only one point within a grid. this one point represent all the other points within the grid.
+	// This way the number of points to process is reduced
+	pcl::VoxelGrid<PointT> vg;
+	typename pcl::PointCloud<PointT>::Ptr cloudFiltered(new pcl::PointCloud<PointT>);
+	vg.setInputCloud(cloud);
+	vg.setLeafSize(filterRes, filterRes, filterRes);
+	vg.filter(*cloudFiltered);
+
+	// Remove points outside the region of interest. Region of interest is the region close to the car
+	typename pcl::PointCloud<PointT>::Ptr cloudRegion(new pcl::PointCloud<PointT>);
+	pcl::CropBox<PointT> region(true);
+	region.setMin(minPoint);
+	region.setMax(maxPoint);
+	region.setInputCloud(cloudFiltered);
+	region.filter(*cloudRegion);
+
+	// Remove roof points, define roof region
+	std::vector<int> indices;
+	pcl::CropBox<PointT> roof(true);
+	region.setMin(Eigen::Vector4f(-1.5, -1.7, -1, 1));
+	region.setMax(Eigen::Vector4f(2.6, 1.7, -0.4, 1));
+	region.setInputCloud(cloudRegion);
+	region.filter(indices);
+	// Remove roof points, get points within the roof region which will be the inliers
+	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+	for(unsigned index : indices) {
+		inliers->indices.push_back(index);
+	}// Remove roof points, remove these inliers from cloudRegion
+	pcl::ExtractIndices<PointT> extract;
+	extract.setInputCloud(cloudRegion);
+	extract.setIndices(inliers);
+	extract.setNegative(true);
+	extract.filter(*cloudRegion);
 
     auto endTime = std::chrono::steady_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     std::cout << "filtering took " << elapsedTime.count() << " milliseconds" << std::endl;
 
-    return cloud;
+    return cloudRegion;
 
 }
 
@@ -68,7 +101,7 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
 
     // TODO:: Fill in this function to find inliers for the cloud.
 	/* Create the segmentation object */
-	pcl::SACSegmentation<pcl::PointXYZ> seg;
+	pcl::SACSegmentation<PointT> seg;
 	/* Create variables to hold coefficients and inliers */
 	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients());
 	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
